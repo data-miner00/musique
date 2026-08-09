@@ -19,10 +19,11 @@ An implementation-ready **spec document** for a self-hosted music player MVP: pl
 - [Auth & deployment scope](issues/03-auth-and-deployment-scope.md) — auth and Docker packaging both deferred past this MVP.
 - [Frontend UI scope](issues/04-frontend-ui-scope.md) — keep the mock UI shell; wire up core transport + folder-derived playlists; lyrics/likes/shuffle/repeat/queue/seek/cover-art/visualizer stay hidden or fake for now; mobile nav stays functional.
 - [Search approach](issues/05-search-approach.md) — client-side filter over the loaded track list; Meilisearch noted as a possible distinct future feature.
+- [Write the MVP spec document](issues/06-write-mvp-spec.md) — spec published to [`spec.md`](spec.md); no automated tests per explicit user preference (overrides the two proposed test seams).
 
 ## Not yet specified
 
-(none — the remaining work is synthesizing the decisions above into the spec itself, tracked as [Write the MVP spec document](issues/06-write-mvp-spec.md))
+(none — destination reached, no open tickets remain)
 
 ## Out of scope
 
