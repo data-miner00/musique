@@ -4,15 +4,21 @@
 
 **Blocked by:** None — can start immediately.
 
-**Status:** ready
+**Status:** done
 
-- [ ] `mutagen` is added as a backend dependency.
-- [ ] The music root path is configurable via an environment variable.
-- [ ] Non-mp3 files in the mounted folder are skipped and never appear in scan results.
-- [ ] A track's title/artist/album/track number/duration are read from its tags when present.
-- [ ] A track with missing or unreadable tags still appears, labeled from its filename.
-- [ ] `GET /tracks` returns the full flat track list ordered by artist → album → track number → filename.
-- [ ] `GET /playlists` returns one playlist per top-level subfolder of the music root, plus one playlist for tracks sitting directly in the root (when any exist).
-- [ ] `GET /playlists/{id}/tracks` returns that playlist's tracks in the same ordering.
-- [ ] `GET /stream/{trackId}` returns the track's raw audio bytes with an `audio/mpeg` content type.
-- [ ] Restarting the backend re-scans the folder from scratch (no stale state, no crash on an empty folder).
+- [x] `mutagen` is added as a backend dependency.
+- [x] The music root path is configurable via an environment variable.
+- [x] Non-mp3 files in the mounted folder are skipped and never appear in scan results.
+- [x] A track's title/artist/album/track number/duration are read from its tags when present.
+- [x] A track with missing or unreadable tags still appears, labeled from its filename.
+- [x] `GET /tracks` returns the full flat track list ordered by artist → album → track number → filename.
+- [x] `GET /playlists` returns one playlist per top-level subfolder of the music root, plus one playlist for tracks sitting directly in the root (when any exist).
+- [x] `GET /playlists/{id}/tracks` returns that playlist's tracks in the same ordering.
+- [x] `GET /stream/{trackId}` returns the track's raw audio bytes with an `audio/mpeg` content type.
+- [x] Restarting the backend re-scans the folder from scratch (no stale state, no crash on an empty folder).
+
+## Comments
+
+Implemented in `backend/library.py` (scan/tag/ordering logic, `Library` container) and `backend/main.py` (FastAPI wiring, lifespan-driven scan on startup). Verified via manual smoke checks (fixture mp3s with tagged/untagged/corrupt/non-mp3 files, real HTTP round trip through every endpoint) — no automated tests, per this project's no-tests policy.
+
+`/code-review` (Standards + Spec axes) found no hard violations. Applied one fix from it: collapsed four parallel module-level globals into a single `Library` container (also resolved a duplicated index-building smell), and added a log line when a corrupt/unparseable `.mp3` file is skipped. Left as judgement calls, not changed: `PlaylistOut.track_count` and alphabetical playlist-list ordering (harmless additions beyond the ticket's literal ask); an untagged track's `track_number` defaults to `0` in the sort key (unspecified either way).
