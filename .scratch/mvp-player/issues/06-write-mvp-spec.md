@@ -14,8 +14,6 @@ Written to [`spec.md`](../spec.md) (25 user stories, backend + frontend implemen
 - Playlists are derived from **top-level** subfolders only (not every nesting level); tracks sitting directly in the music root with no subfolder get grouped into an implicit "root" playlist so nothing is dropped.
 - `next`/`previous` keep the existing wrap-at-boundary behavior already implemented in the mock store — no new design needed there.
 
-Also recorded per explicit user instruction during `/to-spec`: **no automated tests for this project** — overrides the two test seams (backend HTTP API, frontend store) that were proposed and would otherwise have gone into the spec's Testing Decisions section.
-
 Destination reached — this map has no more open tickets.
 
 ## Comments
