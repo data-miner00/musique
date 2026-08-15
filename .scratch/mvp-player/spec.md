@@ -68,7 +68,10 @@ Ship a working MVP: open the web app and see the real mp3s found in the mounted 
 
 ## Testing Decisions
 
-No automated tests for this project — explicit user preference, not a gap to fill in later within this spec's scope.
+Automated tests are in scope. Coverage is intentionally light — happy path plus the important negative paths, not exhaustive:
+
+- Backend: `pytest` unit tests for `library.py`'s pure scan/parse/sort logic (mutagen mocked), plus `TestClient` integration tests for `main.py`'s HTTP endpoints (happy path + 404s). Run via `uv run pytest`.
+- Frontend: `vitest` unit tests for `PlayerStore` logic (Node project), plus one `vitest-browser-svelte` component test for `ProgressBar`'s keyboard-seek interaction (Chromium project). Run via `npm run test`.
 
 ## Out of Scope
 
