@@ -6,7 +6,7 @@ function clamp01(n: number) {
 	return Math.min(1, Math.max(0, n));
 }
 
-class PlayerStore {
+export class PlayerStore {
 	screen = $state<Screen>('home');
 	nowPlayingOpen = $state(false);
 	activePlaylistId = $state('p1');

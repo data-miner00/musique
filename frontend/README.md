@@ -40,3 +40,29 @@ npm run build
 You can preview the production build with `npm run preview`.
 
 > To deploy your app, you may need to install an [adapter](https://svelte.dev/docs/kit/adapters) for your target environment.
+
+## Testing
+
+Run the full test suite once (unit + component):
+
+```sh
+npm run test
+```
+
+Run just the store/logic unit tests (Node environment):
+
+```sh
+npm run test:unit -- --project=server --run
+```
+
+Run just the component tests (real Chromium via Playwright):
+
+```sh
+npm run test:unit -- --project=client --run
+```
+
+Watch mode (reruns on file change):
+
+```sh
+npm run test:unit
+```
