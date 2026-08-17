@@ -10,7 +10,9 @@ export type Track = {
 	title: string;
 	artist: string;
 	album: string;
-	duration: string;
+	durationSec: number;
+	playlistId: string;
+	streamUrl: string;
 	hue: number;
 };
 

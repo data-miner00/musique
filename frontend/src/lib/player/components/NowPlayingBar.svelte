@@ -3,6 +3,7 @@
 	import Cover from './Cover.svelte';
 	import Icon from './Icon.svelte';
 	import ProgressBar from './ProgressBar.svelte';
+	import { formatTime } from '../format';
 </script>
 
 <div
@@ -58,7 +59,9 @@
 				onSeek={(r) => player.seek(r)}
 				fillColor="var(--color-ink-3)"
 			/>
-			<span class="w-8 text-[11px] text-ink-dimmer">{player.currentTrack.duration}</span>
+			<span class="w-8 text-[11px] text-ink-dimmer"
+				>{formatTime(player.currentTrack.durationSec)}</span
+			>
 		</div>
 	</div>
 
