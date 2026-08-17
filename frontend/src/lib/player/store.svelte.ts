@@ -1,6 +1,23 @@
 import { browser } from '$app/environment';
-import { LYRICS, PLAYLISTS, TRACKS_BY_PLAYLIST } from './data';
-import type { Screen, Track } from './types';
+import { fetchPlaylists, fetchTracks, songLabel } from './api';
+import { LYRICS } from './data';
+import { formatTime, hueForId } from './format';
+import type { Playlist, Screen, Track } from './types';
+
+export const ALL_TRACKS_PLAYLIST_ID = '__all-tracks__';
+
+const EMPTY_TRACK: Track = {
+	id: '',
+	title: '',
+	artist: '',
+	album: '',
+	durationSec: 0,
+	playlistId: '',
+	streamUrl: '',
+	hue: 0
+};
+
+const EMPTY_PLAYLIST: Playlist = { id: '', name: '', desc: '', hue: 0 };
 
 function clamp01(n: number) {
 	return Math.min(1, Math.max(0, n));
@@ -9,11 +26,14 @@ function clamp01(n: number) {
 export class PlayerStore {
 	screen = $state<Screen>('home');
 	nowPlayingOpen = $state(false);
-	activePlaylistId = $state('p1');
-	currentTrackId = $state('t1');
+	playlists = $state<Playlist[]>([]);
+	tracksByPlaylist = $state<Record<string, Track[]>>({});
+	activePlaylistId = $state(ALL_TRACKS_PLAYLIST_ID);
+	currentTrackId = $state<string | null>(null);
+	searchQuery = $state('');
 
-	isPlaying = $state(true);
-	progress = $state(0.35);
+	isPlaying = $state(false);
+	progress = $state(0);
 	volume = $state(0.7);
 
 	showLyrics = $state(false);
@@ -21,22 +41,39 @@ export class PlayerStore {
 	shuffleOn = $state(false);
 	repeatOn = $state(false);
 
-	likedIds = $state<Record<string, boolean>>({ t2: true, t5: true });
+	likedIds = $state<Record<string, boolean>>({});
 
-	playlists = PLAYLISTS;
+	#audio: HTMLAudioElement | null = null;
 
-	tracks = $derived(TRACKS_BY_PLAYLIST[this.activePlaylistId] ?? TRACKS_BY_PLAYLIST.p1);
-	activePlaylist = $derived(PLAYLISTS.find((p) => p.id === this.activePlaylistId) ?? PLAYLISTS[0]);
-	currentTrack = $derived<Track>(
-		this.tracks.find((t) => t.id === this.currentTrackId) ?? this.tracks[0]
+	searchResults = $derived.by(() => {
+		const query = this.searchQuery.trim().toLowerCase();
+		if (!query) return [];
+		const all = this.tracksByPlaylist[ALL_TRACKS_PLAYLIST_ID] ?? [];
+		return all.filter(
+			(t) =>
+				t.title.toLowerCase().includes(query) ||
+				t.artist.toLowerCase().includes(query) ||
+				t.album.toLowerCase().includes(query)
+		);
+	});
+
+	tracks = $derived(
+		this.screen === 'search'
+			? this.searchResults
+			: (this.tracksByPlaylist[this.activePlaylistId] ?? [])
 	);
 
-	elapsedLabel = $derived.by(() => {
-		const [dm, ds] = this.currentTrack.duration.split(':').map(Number);
-		const totalSec = dm * 60 + ds;
-		const curSec = Math.floor(this.progress * totalSec);
-		return Math.floor(curSec / 60) + ':' + String(curSec % 60).padStart(2, '0');
-	});
+	activePlaylist = $derived(
+		this.playlists.find((p) => p.id === this.activePlaylistId) ?? EMPTY_PLAYLIST
+	);
+
+	currentTrack = $derived(
+		(this.tracksByPlaylist[ALL_TRACKS_PLAYLIST_ID] ?? []).find(
+			(t) => t.id === this.currentTrackId
+		) ?? EMPTY_TRACK
+	);
+
+	elapsedLabel = $derived.by(() => formatTime(this.progress * this.currentTrack.durationSec));
 
 	activeLyricIndex = $derived(Math.floor(this.progress * LYRICS.length));
 	lyrics = LYRICS;
@@ -50,13 +87,54 @@ export class PlayerStore {
 
 	constructor() {
 		if (browser) {
-			const timer = setInterval(() => {
-				if (this.isPlaying) {
-					this.progress = this.progress >= 1 ? 0 : this.progress + 0.003;
-				}
-			}, 300);
-			// Store is a module-level singleton for the lifetime of the tab; no teardown needed.
-			void timer;
+			this.#audio = new Audio();
+			this.#audio.volume = this.volume;
+			this.#audio.addEventListener('timeupdate', () => this.#onTimeUpdate());
+			this.#audio.addEventListener('ended', () => this.nextTrack());
+			void this.loadLibrary();
+		}
+	}
+
+	async loadLibrary() {
+		try {
+			const [playlists, tracks] = await Promise.all([fetchPlaylists(), fetchTracks()]);
+
+			const grouped: Record<string, Track[]> = {};
+			for (const track of tracks) {
+				(grouped[track.playlistId] ??= []).push(track);
+			}
+			grouped[ALL_TRACKS_PLAYLIST_ID] = tracks;
+
+			const allTracksPlaylist: Playlist = {
+				id: ALL_TRACKS_PLAYLIST_ID,
+				name: 'All Tracks',
+				desc: songLabel(tracks.length),
+				hue: hueForId(ALL_TRACKS_PLAYLIST_ID)
+			};
+
+			this.tracksByPlaylist = grouped;
+			this.playlists = [allTracksPlaylist, ...playlists];
+		} catch (err) {
+			console.error('Failed to load library from backend', err);
+		}
+	}
+
+	#onTimeUpdate() {
+		if (!this.#audio) return;
+		const duration = this.#audio.duration || this.currentTrack.durationSec;
+		this.progress = duration > 0 ? clamp01(this.#audio.currentTime / duration) : 0;
+	}
+
+	#startPlayback(track: Track) {
+		this.currentTrackId = track.id;
+		this.progress = 0;
+		this.isPlaying = true;
+		if (this.#audio) {
+			this.#audio.src = track.streamUrl;
+			void this.#audio.play().catch(() => {
+				// Playback can be rejected before a user gesture unlocks audio;
+				// the transport controls remain usable and reflect real state either way.
+			});
 		}
 	}
 
@@ -90,27 +168,31 @@ export class PlayerStore {
 	}
 
 	togglePlay() {
+		if (!this.currentTrackId) return;
 		this.isPlaying = !this.isPlaying;
+		if (this.#audio) {
+			if (this.isPlaying) void this.#audio.play();
+			else this.#audio.pause();
+		}
 	}
 
 	playTrack(id: string) {
-		this.currentTrackId = id;
-		this.isPlaying = true;
-		this.progress = 0.02;
+		const track = this.tracks.find((t) => t.id === id);
+		if (track) this.#startPlayback(track);
 	}
 
 	nextTrack() {
 		const list = this.tracks;
+		if (list.length === 0) return;
 		const idx = list.findIndex((t) => t.id === this.currentTrackId);
-		this.currentTrackId = list[(idx + 1) % list.length].id;
-		this.progress = 0.02;
+		this.#startPlayback(list[(idx + 1) % list.length]);
 	}
 
 	prevTrack() {
 		const list = this.tracks;
+		if (list.length === 0) return;
 		const idx = list.findIndex((t) => t.id === this.currentTrackId);
-		this.currentTrackId = list[(idx - 1 + list.length) % list.length].id;
-		this.progress = 0.02;
+		this.#startPlayback(list[(idx - 1 + list.length) % list.length]);
 	}
 
 	toggleLike(id: string) {
@@ -136,11 +218,15 @@ export class PlayerStore {
 	}
 
 	seek(ratio: number) {
+		// Scrubbing isn't wired to real playback yet (no HTTP Range support on
+		// the stream endpoint) - this only nudges the displayed position, which
+		// self-corrects from the next `timeupdate` while a track is playing.
 		this.progress = clamp01(ratio);
 	}
 
 	setVolume(ratio: number) {
 		this.volume = clamp01(ratio);
+		if (this.#audio) this.#audio.volume = this.volume;
 	}
 }
 

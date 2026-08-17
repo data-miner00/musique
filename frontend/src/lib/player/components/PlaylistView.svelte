@@ -2,6 +2,7 @@
 	import { player } from '../store.svelte';
 	import Cover from './Cover.svelte';
 	import Icon from './Icon.svelte';
+	import { formatTime } from '../format';
 </script>
 
 <div class="flex flex-col gap-6">
@@ -14,9 +15,7 @@
 			<span class="text-2xl leading-[1.05] font-extrabold text-ink lg:text-[40px]"
 				>{player.activePlaylist.name}</span
 			>
-			<span class="text-[13px] text-ink-dim"
-				>{player.activePlaylist.desc} &middot; {player.tracks.length} songs</span
-			>
+			<span class="text-[13px] text-ink-dim">{player.activePlaylist.desc}</span>
 		</div>
 	</div>
 
@@ -99,7 +98,7 @@
 				<span class="overflow-hidden text-xs text-ellipsis whitespace-nowrap text-ink-dimmer"
 					>{t.album}</span
 				>
-				<span class="text-xs text-ink-dimmer">{t.duration}</span>
+				<span class="text-xs text-ink-dimmer">{formatTime(t.durationSec)}</span>
 				<button
 					onclick={(e) => {
 						e.stopPropagation();

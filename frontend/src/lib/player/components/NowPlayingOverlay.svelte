@@ -3,6 +3,7 @@
 	import Cover from './Cover.svelte';
 	import Icon from './Icon.svelte';
 	import ProgressBar from './ProgressBar.svelte';
+	import { formatTime } from '../format';
 
 	let bg1 = $derived(`oklch(24% 0.06 ${player.currentTrack.hue})`);
 	let mobilePanel = $derived<'lyrics' | 'queue' | null>(
@@ -105,7 +106,9 @@
 					height={5}
 					fillColor="var(--color-accent)"
 				/>
-				<span class="w-8 text-[11px] text-ink-dimmer">{player.currentTrack.duration}</span>
+				<span class="w-8 text-[11px] text-ink-dimmer"
+					>{formatTime(player.currentTrack.durationSec)}</span
+				>
 			</div>
 
 			<div class="flex items-center gap-6.5">
