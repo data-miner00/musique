@@ -4,10 +4,10 @@
 
 **Blocked by:** 02 — Real playback: browse playlists & play tracks end-to-end
 
-**Status:** ready
+**Status:** done
 
-- [ ] The Search screen has a working text input.
-- [ ] Typing filters the visible track list to tracks whose title, artist, or album contains the typed text (case-insensitive substring match).
-- [ ] Clicking a track in the filtered results plays it, same as everywhere else in the app.
-- [ ] Clearing the input restores the full track list.
-- [ ] Filtering happens client-side over the track list already loaded into the store — no new backend endpoint.
+- [x] The Search screen has a working text input.
+- [x] Typing filters the visible track list to tracks whose title, artist, or album contains the typed text (case-insensitive substring match).
+- [x] Clicking a track in the filtered results plays it, same as everywhere else in the app.
+- [x] Clearing the input restores the full track list.
+- [x] Filtering happens client-side over the track list already loaded into the store — no new backend endpoint.
