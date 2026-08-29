@@ -19,7 +19,7 @@ type PlaylistDto = {
 	track_count: number;
 };
 
-function songLabel(count: number): string {
+export function songLabel(count: number): string {
 	return `${count} song${count === 1 ? '' : 's'}`;
 }
 
@@ -58,5 +58,3 @@ export async function fetchPlaylists(): Promise<Playlist[]> {
 	const dtos: PlaylistDto[] = await res.json();
 	return dtos.map(toPlaylist);
 }
-
-export { songLabel };
