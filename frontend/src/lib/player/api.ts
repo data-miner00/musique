@@ -1,7 +1,8 @@
 import { hueForId } from './format';
 import type { Playlist, Track } from './types';
+import { PUBLIC_API_BASE_URL } from '$env/static/public';
 
-const API_BASE = 'http://localhost:8000';
+const API_BASE = PUBLIC_API_BASE_URL;
 
 type TrackDto = {
 	id: string;
