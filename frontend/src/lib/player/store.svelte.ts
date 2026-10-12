@@ -6,6 +6,8 @@ import type { Playlist, Screen, Track } from './types';
 
 export const ALL_TRACKS_PLAYLIST_ID = '__all-tracks__';
 
+const SEEK_STEP_SEC = 5;
+
 const EMPTY_TRACK: Track = {
 	id: '',
 	title: '',
@@ -34,6 +36,8 @@ export class PlayerStore {
 
 	isPlaying = $state(false);
 	progress = $state(0);
+	// Position previewed while the seek bar is being dragged; null otherwise.
+	scrubRatio = $state<number | null>(null);
 	volume = $state(0.7);
 
 	showLyrics = $state(false);
@@ -73,7 +77,15 @@ export class PlayerStore {
 		) ?? EMPTY_TRACK
 	);
 
-	elapsedLabel = $derived.by(() => formatTime(this.progress * this.currentTrack.durationSec));
+	displayProgress = $derived(this.scrubRatio ?? this.progress);
+
+	elapsedLabel = $derived.by(() =>
+		formatTime(this.displayProgress * this.currentTrack.durationSec)
+	);
+
+	seekStep = $derived(
+		this.currentTrack.durationSec > 0 ? SEEK_STEP_SEC / this.currentTrack.durationSec : 0
+	);
 
 	activeLyricIndex = $derived(Math.floor(this.progress * LYRICS.length));
 	lyrics = LYRICS;
@@ -85,14 +97,14 @@ export class PlayerStore {
 		)
 	);
 
-	constructor() {
-		if (browser) {
-			this.#audio = new Audio();
+	constructor(audio?: HTMLAudioElement) {
+		this.#audio = audio ?? (browser ? new Audio() : null);
+		if (this.#audio) {
 			this.#audio.volume = this.volume;
 			this.#audio.addEventListener('timeupdate', () => this.#onTimeUpdate());
 			this.#audio.addEventListener('ended', () => this.nextTrack());
-			void this.loadLibrary();
 		}
+		if (browser) void this.loadLibrary();
 	}
 
 	async loadLibrary() {
@@ -119,9 +131,16 @@ export class PlayerStore {
 		}
 	}
 
+	#duration() {
+		// The element's duration is NaN until metadata has loaded; fall back to
+		// the tagged length so an early seek still lands in the right place.
+		const real = this.#audio?.duration;
+		return real && Number.isFinite(real) ? real : this.currentTrack.durationSec;
+	}
+
 	#onTimeUpdate() {
 		if (!this.#audio) return;
-		const duration = this.#audio.duration || this.currentTrack.durationSec;
+		const duration = this.#duration();
 		this.progress = duration > 0 ? clamp01(this.#audio.currentTime / duration) : 0;
 	}
 
@@ -217,11 +236,15 @@ export class PlayerStore {
 		this.repeatOn = !this.repeatOn;
 	}
 
+	previewSeek(ratio: number | null) {
+		this.scrubRatio = ratio === null || !this.currentTrackId ? null : clamp01(ratio);
+	}
+
 	seek(ratio: number) {
-		// Scrubbing isn't wired to real playback yet (no HTTP Range support on
-		// the stream endpoint) - this only nudges the displayed position, which
-		// self-corrects from the next `timeupdate` while a track is playing.
+		if (!this.currentTrackId) return;
 		this.progress = clamp01(ratio);
+		this.scrubRatio = null;
+		if (this.#audio) this.#audio.currentTime = this.progress * this.#duration();
 	}
 
 	setVolume(ratio: number) {

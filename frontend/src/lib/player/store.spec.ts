@@ -16,8 +16,20 @@ function makeTrack(id: string, overrides: Partial<Track> = {}): Track {
 	};
 }
 
-function storeWithLibrary(): PlayerStore {
-	const store = new PlayerStore();
+function fakeAudio(duration: number): HTMLAudioElement {
+	return {
+		currentTime: 0,
+		duration,
+		volume: 1,
+		src: '',
+		addEventListener: () => {},
+		play: () => Promise.resolve(),
+		pause: () => {}
+	} as unknown as HTMLAudioElement;
+}
+
+function storeWithLibrary(audio?: HTMLAudioElement): PlayerStore {
+	const store = new PlayerStore(audio);
 	const p1Tracks = ['t1', 't2', 't3'].map((id) => makeTrack(id, { playlistId: 'p1' }));
 	const p2Tracks = [makeTrack('t4', { playlistId: 'p2', title: 'Midnight Run', artist: 'Nova' })];
 	const allTracks = [...p1Tracks, ...p2Tracks];
@@ -85,8 +97,30 @@ describe('PlayerStore', () => {
 		expect(store.isLiked('t1')).toBe(false);
 	});
 
+	it('seek moves the audio to the matching position in the track', () => {
+		const audio = fakeAudio(200);
+		const store = storeWithLibrary(audio);
+		store.playTrack('t1');
+
+		store.seek(0.5);
+
+		expect(audio.currentTime).toBe(100);
+		expect(store.progress).toBe(0.5);
+	});
+
+	it('seek does nothing when no track is loaded', () => {
+		const audio = fakeAudio(200);
+		const store = storeWithLibrary(audio);
+
+		store.seek(0.5);
+
+		expect(audio.currentTime).toBe(0);
+		expect(store.progress).toBe(0);
+	});
+
 	it('seek clamps ratios outside 0..1', () => {
 		const store = storeWithLibrary();
+		store.playTrack('t1');
 
 		store.seek(-0.5);
 		expect(store.progress).toBe(0);
