@@ -33,6 +33,14 @@ def test_stream_track_returns_audio_bytes(client):
     assert response.content == b"fake-audio-bytes"
 
 
+def test_stream_track_serves_requested_byte_range(client):
+    response = client.get("/stream/track-1", headers={"Range": "bytes=0-3"})
+
+    assert response.status_code == 206
+    assert response.headers["content-range"] == "bytes 0-3/16"
+    assert response.content == b"fake"
+
+
 def test_stream_track_404s_for_unknown_track(client):
     response = client.get("/stream/does-not-exist")
 

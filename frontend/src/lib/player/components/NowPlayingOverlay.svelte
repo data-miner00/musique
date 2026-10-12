@@ -101,8 +101,10 @@
 			<div class="flex w-full items-center gap-2.5">
 				<span class="w-8 text-right text-[11px] text-ink-dimmer">{player.elapsedLabel}</span>
 				<ProgressBar
-					value={player.progress}
+					value={player.displayProgress}
 					onSeek={(r) => player.seek(r)}
+					onPreview={(r) => player.previewSeek(r)}
+					step={player.seekStep}
 					height={5}
 					fillColor="var(--color-accent)"
 				/>
