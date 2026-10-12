@@ -20,11 +20,11 @@
 	</div>
 
 	<button
-		onclick={() => player.togglePlay()}
+		onclick={() => player.toggleActivePlaylist()}
 		class="mx-auto flex h-13 w-13 items-center justify-center self-center rounded-full bg-accent lg:mx-0 lg:h-14 lg:w-14 lg:self-start"
-		aria-label={player.isPlaying ? 'Pause' : 'Play'}
+		aria-label={player.activePlaylistPlaying ? 'Pause' : 'Play'}
 	>
-		<Icon name={player.isPlaying ? 'pause' : 'play'} size={18} class="text-panel-2" />
+		<Icon name={player.activePlaylistPlaying ? 'pause' : 'play'} size={18} class="text-panel-2" />
 	</button>
 
 	<!-- Mobile track list -->

@@ -8,6 +8,7 @@
 		| 'volume'
 		| 'shuffle'
 		| 'repeat'
+		| 'repeat-one'
 		| 'lyrics'
 		| 'queue'
 		| 'home'
@@ -72,7 +73,7 @@
 			stroke-linejoin="round"
 			d="M4 6h3l9 12h4M4 18h3l3-4M16 6h4M17 4v4h-4"
 		/>
-	{:else if name === 'repeat'}
+	{:else if name === 'repeat' || name === 'repeat-one'}
 		<path
 			stroke="currentColor"
 			stroke-width="1.8"
@@ -80,6 +81,15 @@
 			stroke-linejoin="round"
 			d="M4 8a4 4 0 014-4h11M19 5v4M20 16a4 4 0 01-4 4H5M5 19v-4"
 		/>
+		{#if name === 'repeat-one'}
+			<path
+				stroke="currentColor"
+				stroke-width="1.8"
+				stroke-linecap="round"
+				stroke-linejoin="round"
+				d="M10.8 10.4l1.6-1.4v6"
+			/>
+		{/if}
 	{:else if name === 'lyrics'}
 		<path
 			stroke="currentColor"

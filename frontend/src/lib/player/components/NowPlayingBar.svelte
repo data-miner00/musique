@@ -48,8 +48,12 @@
 			<button onclick={() => player.nextTrack()} aria-label="Next track">
 				<Icon name="next" size={20} class="text-ink-3" />
 			</button>
-			<button onclick={() => player.toggleRepeat()} aria-label="Repeat">
-				<Icon name="repeat" size={18} class={player.repeatOn ? 'text-accent' : 'text-ink-dim'} />
+			<button onclick={() => player.cycleRepeat()} aria-label="Repeat: {player.repeatMode}">
+				<Icon
+					name={player.repeatMode === 'one' ? 'repeat-one' : 'repeat'}
+					size={18}
+					class={player.repeatMode === 'off' ? 'text-ink-dim' : 'text-accent'}
+				/>
 			</button>
 		</div>
 		<div class="flex w-full max-w-[520px] items-center gap-2">
@@ -71,8 +75,8 @@
 		<button onclick={() => player.toggleLyrics()} class="p-1" aria-label="Toggle lyrics">
 			<Icon name="lyrics" size={18} class={player.showLyrics ? 'text-accent' : 'text-ink-dim'} />
 		</button>
-		<button onclick={() => player.toggleQueue()} class="p-1" aria-label="Toggle queue">
-			<Icon name="queue" size={18} class={player.showQueue ? 'text-accent' : 'text-ink-dim'} />
+		<button onclick={() => player.openQueue()} class="p-1" aria-label="Open queue">
+			<Icon name="queue" size={18} class="text-ink-dim" />
 		</button>
 		<div class="flex w-[110px] items-center gap-1.5">
 			<Icon name="volume" size={16} class="text-ink-dim" />

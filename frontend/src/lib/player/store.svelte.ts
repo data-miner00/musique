@@ -2,11 +2,15 @@ import { browser } from '$app/environment';
 import { fetchPlaylists, fetchTracks, songLabel } from './api';
 import { LYRICS } from './data';
 import { formatTime, hueForId } from './format';
-import type { Playlist, Screen, Track } from './types';
+import type { Playlist, QueueSource, RepeatMode, Screen, Track } from './types';
 
 export const ALL_TRACKS_PLAYLIST_ID = '__all-tracks__';
 
+const SEARCH_SOURCE: QueueSource = { id: '__search__', name: 'Search results' };
+
 const SEEK_STEP_SEC = 5;
+// "Previous" restarts the current song once it is further in than this.
+const PREV_RESTART_SEC = 3;
 
 const EMPTY_TRACK: Track = {
 	id: '',
@@ -43,11 +47,18 @@ export class PlayerStore {
 	showLyrics = $state(false);
 	showQueue = $state(false);
 	shuffleOn = $state(false);
-	repeatOn = $state(false);
+	repeatMode = $state<RepeatMode>('off');
+
+	// Tracks in the order they will play; shuffled while shuffle is on.
+	queue = $state<Track[]>([]);
+	queueSource = $state<QueueSource | null>(null);
 
 	likedIds = $state<Record<string, boolean>>({});
 
 	#audio: HTMLAudioElement | null = null;
+	#random: () => number;
+	// The captured list in its original order, for turning shuffle back off.
+	#queueOrder: Track[] = [];
 
 	searchResults = $derived.by(() => {
 		const query = this.searchQuery.trim().toLowerCase();
@@ -77,6 +88,14 @@ export class PlayerStore {
 		) ?? EMPTY_TRACK
 	);
 
+	queueIndex = $derived(this.queue.findIndex((t) => t.id === this.currentTrackId));
+
+	upNext = $derived(this.queueIndex < 0 ? [] : this.queue.slice(this.queueIndex + 1));
+
+	activePlaylistPlaying = $derived(
+		this.isPlaying && this.queueSource?.id === this.activePlaylistId
+	);
+
 	displayProgress = $derived(this.scrubRatio ?? this.progress);
 
 	elapsedLabel = $derived.by(() =>
@@ -97,12 +116,16 @@ export class PlayerStore {
 		)
 	);
 
-	constructor(audio?: HTMLAudioElement) {
+	constructor({
+		audio,
+		random = Math.random
+	}: { audio?: HTMLAudioElement; random?: () => number } = {}) {
 		this.#audio = audio ?? (browser ? new Audio() : null);
+		this.#random = random;
 		if (this.#audio) {
 			this.#audio.volume = this.volume;
 			this.#audio.addEventListener('timeupdate', () => this.#onTimeUpdate());
-			this.#audio.addEventListener('ended', () => this.nextTrack());
+			this.#audio.addEventListener('ended', () => this.#onEnded());
 		}
 		if (browser) void this.loadLibrary();
 	}
@@ -144,17 +167,76 @@ export class PlayerStore {
 		this.progress = duration > 0 ? clamp01(this.#audio.currentTime / duration) : 0;
 	}
 
+	#onEnded() {
+		if (this.repeatMode === 'one') {
+			this.seek(0);
+			this.#play();
+		} else {
+			this.nextTrack();
+		}
+	}
+
+	#play() {
+		void this.#audio?.play().catch(() => {
+			// Playback can be rejected before a user gesture unlocks audio;
+			// the transport controls remain usable and reflect real state either way.
+		});
+	}
+
 	#startPlayback(track: Track) {
 		this.currentTrackId = track.id;
 		this.progress = 0;
 		this.isPlaying = true;
 		if (this.#audio) {
 			this.#audio.src = track.streamUrl;
-			void this.#audio.play().catch(() => {
-				// Playback can be rejected before a user gesture unlocks audio;
-				// the transport controls remain usable and reflect real state either way.
-			});
+			this.#play();
 		}
+	}
+
+	// Past the end of the queue with repeat off: rest on the first track, paused.
+	#restAtStart() {
+		const first = this.queue[0];
+		this.currentTrackId = first.id;
+		this.progress = 0;
+		this.isPlaying = false;
+		if (this.#audio) {
+			this.#audio.pause();
+			this.#audio.src = first.streamUrl;
+		}
+	}
+
+	#shuffled(list: Track[]): Track[] {
+		const out = [...list];
+		for (let i = out.length - 1; i > 0; i--) {
+			const j = Math.floor(this.#random() * (i + 1));
+			[out[i], out[j]] = [out[j], out[i]];
+		}
+		return out;
+	}
+
+	#shuffledAround(first: Track): Track[] {
+		return [first, ...this.#shuffled(this.#queueOrder.filter((t) => t.id !== first.id))];
+	}
+
+	#setQueue(list: Track[], first: Track, source: QueueSource) {
+		this.#queueOrder = [...list];
+		this.queue = this.shuffleOn ? this.#shuffledAround(first) : [...list];
+		this.queueSource = source;
+	}
+
+	// A shuffled queue gets a fresh order each lap, never opening with the
+	// song that just finished.
+	#startNextLap() {
+		if (this.shuffleOn && this.queue.length > 1) {
+			const justPlayed = this.queue[this.queue.length - 1];
+			const order = this.#shuffled(this.#queueOrder);
+			if (order[0].id === justPlayed.id) {
+				const j = 1 + Math.floor(this.#random() * (order.length - 1));
+				[order[0], order[j]] = [order[j], order[0]];
+			}
+			this.queue = order;
+		}
+		this.#startPlayback(this.queue[0]);
 	}
 
 	isLiked(trackId: string) {
@@ -189,29 +271,60 @@ export class PlayerStore {
 	togglePlay() {
 		if (!this.currentTrackId) return;
 		this.isPlaying = !this.isPlaying;
-		if (this.#audio) {
-			if (this.isPlaying) void this.#audio.play();
-			else this.#audio.pause();
-		}
+		if (this.isPlaying) this.#play();
+		else this.#audio?.pause();
 	}
 
+	// Plays a track from the list on screen, which becomes the queue.
 	playTrack(id: string) {
-		const track = this.tracks.find((t) => t.id === id);
+		const list = this.tracks;
+		const track = list.find((t) => t.id === id);
+		if (!track) return;
+		const source =
+			this.screen === 'search'
+				? SEARCH_SOURCE
+				: { id: this.activePlaylist.id, name: this.activePlaylist.name };
+		this.#setQueue(list, track, source);
+		this.#startPlayback(track);
+	}
+
+	playFromQueue(id: string) {
+		const track = this.queue.find((t) => t.id === id);
 		if (track) this.#startPlayback(track);
 	}
 
-	nextTrack() {
-		const list = this.tracks;
+	// The Play button on a playlist page: starts that playlist unless it is
+	// already the one playing, in which case it pauses or resumes.
+	toggleActivePlaylist() {
+		if (this.currentTrackId && this.queueSource?.id === this.activePlaylistId) {
+			this.togglePlay();
+			return;
+		}
+		const list = this.tracksByPlaylist[this.activePlaylistId] ?? [];
 		if (list.length === 0) return;
-		const idx = list.findIndex((t) => t.id === this.currentTrackId);
-		this.#startPlayback(list[(idx + 1) % list.length]);
+		const first = this.shuffleOn ? list[Math.floor(this.#random() * list.length)] : list[0];
+		this.#setQueue(list, first, {
+			id: this.activePlaylist.id,
+			name: this.activePlaylist.name
+		});
+		this.#startPlayback(first);
+	}
+
+	nextTrack() {
+		if (this.queue.length === 0) return;
+		const next = this.queue[this.queueIndex + 1];
+		if (next) this.#startPlayback(next);
+		else if (this.repeatMode === 'off') this.#restAtStart();
+		else this.#startNextLap();
 	}
 
 	prevTrack() {
-		const list = this.tracks;
-		if (list.length === 0) return;
-		const idx = list.findIndex((t) => t.id === this.currentTrackId);
-		this.#startPlayback(list[(idx - 1 + list.length) % list.length]);
+		if (this.queue.length === 0) return;
+		const elapsedSec = this.progress * this.#duration();
+		if (elapsedSec > PREV_RESTART_SEC) this.seek(0);
+		else if (this.queueIndex > 0) this.#startPlayback(this.queue[this.queueIndex - 1]);
+		else if (this.repeatMode === 'off') this.seek(0);
+		else this.#startPlayback(this.queue[this.queue.length - 1]);
 	}
 
 	toggleLike(id: string) {
@@ -228,12 +341,22 @@ export class PlayerStore {
 		if (this.showQueue) this.showLyrics = false;
 	}
 
-	toggleShuffle() {
-		this.shuffleOn = !this.shuffleOn;
+	openQueue() {
+		this.showQueue = true;
+		this.showLyrics = false;
+		this.nowPlayingOpen = true;
 	}
 
-	toggleRepeat() {
-		this.repeatOn = !this.repeatOn;
+	toggleShuffle() {
+		this.shuffleOn = !this.shuffleOn;
+		const current = this.queue[this.queueIndex];
+		if (!current) return;
+		this.queue = this.shuffleOn ? this.#shuffledAround(current) : [...this.#queueOrder];
+	}
+
+	cycleRepeat() {
+		const order: RepeatMode[] = ['off', 'all', 'one'];
+		this.repeatMode = order[(order.indexOf(this.repeatMode) + 1) % order.length];
 	}
 
 	previewSeek(ratio: number | null) {
