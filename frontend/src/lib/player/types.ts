@@ -17,3 +17,8 @@ export type Track = {
 };
 
 export type Screen = 'home' | 'search' | 'library' | 'playlist';
+
+export type RepeatMode = 'off' | 'all' | 'one';
+
+// Where the current queue was captured from: a playlist, or the search results.
+export type QueueSource = { id: string; name: string };

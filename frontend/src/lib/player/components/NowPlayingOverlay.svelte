@@ -3,6 +3,7 @@
 	import Cover from './Cover.svelte';
 	import Icon from './Icon.svelte';
 	import ProgressBar from './ProgressBar.svelte';
+	import QueueList from './QueueList.svelte';
 	import { formatTime } from '../format';
 
 	let bg1 = $derived(`oklch(24% 0.06 ${player.currentTrack.hue})`);
@@ -28,7 +29,7 @@
 			>NOW PLAYING</span
 		>
 		<span class="text-[10px] font-bold tracking-[1.5px] text-ink-dim lg:hidden"
-			>{player.activePlaylist.name}</span
+			>{player.queueSource?.name ?? ''}</span
 		>
 		<div class="flex items-center gap-4">
 			<button onclick={() => player.toggleLyrics()} aria-label="Toggle lyrics">
@@ -44,7 +45,8 @@
 		class="flex w-full max-w-[1360px] flex-1 flex-col items-center justify-center gap-7 overflow-y-auto lg:flex-row lg:items-center lg:gap-14 lg:overflow-visible"
 	>
 		<div class="flex w-full max-w-[420px] flex-shrink-0 flex-col items-center gap-6">
-			{#if mobilePanel === null}
+			<!-- A panel replaces the cover on mobile only; on desktop it sits beside it. -->
+			<div class={mobilePanel === null ? 'contents' : 'hidden lg:contents'}>
 				<Cover
 					hue={player.currentTrack.hue}
 					size="clamp(220px, 55vw, 380px)"
@@ -58,7 +60,8 @@
 						></div>
 					{/each}
 				</div>
-			{:else if mobilePanel === 'lyrics'}
+			</div>
+			{#if mobilePanel === 'lyrics'}
 				<div class="flex max-h-[42vh] w-full flex-col gap-3.5 overflow-y-auto py-2 lg:hidden">
 					{#each player.lyrics as line, i (i)}
 						<span
@@ -69,25 +72,9 @@
 						>
 					{/each}
 				</div>
-			{:else}
+			{:else if mobilePanel === 'queue'}
 				<div class="flex max-h-[42vh] w-full flex-col gap-1 overflow-y-auto py-2 lg:hidden">
-					{#each player.tracks as t (t.id)}
-						<button
-							onclick={() => player.playTrack(t.id)}
-							class="flex items-center gap-3 rounded-lg p-2 text-left"
-						>
-							<Cover hue={t.hue} size={40} />
-							<div class="flex min-w-0 flex-col">
-								<span
-									class="overflow-hidden text-[13px] font-semibold text-ellipsis whitespace-nowrap"
-									style={t.id === player.currentTrackId
-										? 'color: var(--color-accent)'
-										: 'color: var(--color-ink-3)'}>{t.title}</span
-								>
-								<span class="text-xs text-ink-dimmer">{t.artist}</span>
-							</div>
-						</button>
-					{/each}
+					<QueueList />
 				</div>
 			{/if}
 
@@ -134,8 +121,12 @@
 				<button onclick={() => player.nextTrack()} aria-label="Next track">
 					<Icon name="next" size={20} class="text-ink-3" />
 				</button>
-				<button onclick={() => player.toggleRepeat()} aria-label="Repeat">
-					<Icon name="repeat" size={18} class={player.repeatOn ? 'text-accent' : 'text-ink-dim'} />
+				<button onclick={() => player.cycleRepeat()} aria-label="Repeat: {player.repeatMode}">
+					<Icon
+						name={player.repeatMode === 'one' ? 'repeat-one' : 'repeat'}
+						size={18}
+						class={player.repeatMode === 'off' ? 'text-ink-dim' : 'text-accent'}
+					/>
 				</button>
 			</div>
 		</div>
@@ -154,24 +145,8 @@
 			</div>
 		{:else if player.showQueue}
 			<div class="hidden max-h-[520px] w-[320px] flex-col gap-1 overflow-y-auto p-2 lg:flex">
-				<span class="mb-2.5 text-xs font-bold tracking-wide text-ink-dimmer">NEXT UP</span>
-				{#each player.tracks as t (t.id)}
-					<button
-						onclick={() => player.playTrack(t.id)}
-						class="flex items-center gap-3 rounded-lg p-2 text-left"
-					>
-						<Cover hue={t.hue} size={40} />
-						<div class="flex min-w-0 flex-col">
-							<span
-								class="overflow-hidden text-[13px] font-semibold text-ellipsis whitespace-nowrap"
-								style={t.id === player.currentTrackId
-									? 'color: var(--color-accent)'
-									: 'color: var(--color-ink-3)'}>{t.title}</span
-							>
-							<span class="text-xs text-ink-dimmer">{t.artist}</span>
-						</div>
-					</button>
-				{/each}
+				<span class="mb-2.5 px-2 text-xs font-bold tracking-wide text-ink-dimmer">NEXT UP</span>
+				<QueueList />
 			</div>
 		{/if}
 	</div>
