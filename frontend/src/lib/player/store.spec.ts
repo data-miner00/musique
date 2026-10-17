@@ -24,6 +24,7 @@ function fakeAudio(duration: number): FakeAudio {
 		currentTime: 0,
 		duration,
 		volume: 1,
+		muted: false,
 		src: '',
 		addEventListener: (type: string, listener: () => void) => {
 			listeners[type] = listener;
@@ -32,6 +33,15 @@ function fakeAudio(duration: number): FakeAudio {
 		play: () => Promise.resolve(),
 		pause: () => {}
 	} as unknown as FakeAudio;
+}
+
+function fakeStorage(initial: Record<string, string> = {}) {
+	const data = new Map(Object.entries(initial));
+	return {
+		data,
+		getItem: (key: string) => data.get(key) ?? null,
+		setItem: (key: string, value: string) => void data.set(key, value)
+	};
 }
 
 function storeWithLibrary(options: ConstructorParameters<typeof PlayerStore>[0] = {}): PlayerStore {
@@ -51,6 +61,8 @@ function storeWithLibrary(options: ConstructorParameters<typeof PlayerStore>[0] 
 		{ id: 'p2', name: 'Folder Two', desc: '1 song', hue: 20 }
 	];
 	store.activePlaylistId = 'p1';
+	// loadLibrary() does this once the tracks are in.
+	store.restoreSaved();
 	return store;
 }
 
@@ -276,6 +288,95 @@ describe('PlayerStore', () => {
 			expect(store.currentTrackId).toBe('t3');
 			expect(ids(store.queue).sort()).toEqual(['t1', 't2', 't3']);
 		});
+	});
+
+	describe('remembered state', () => {
+		it('restores the queue, the song and the position, paused', () => {
+			const storage = fakeStorage();
+			const first = storeWithLibrary({ storage, audio: fakeAudio(200) });
+			first.playTrack('t2');
+			first.seek(0.25);
+
+			const audio = fakeAudio(200);
+			const second = storeWithLibrary({ storage, audio });
+
+			expect(ids(second.queue)).toEqual(['t1', 't2', 't3']);
+			expect(second.queueSource).toEqual({ id: 'p1', name: 'Folder One' });
+			expect(second.currentTrackId).toBe('t2');
+			expect(second.progress).toBe(0.25);
+			expect(second.isPlaying).toBe(false);
+			expect(audio.src).toBe('http://localhost:8000/stream/t2');
+			expect(audio.currentTime).toBe(50);
+		});
+
+		it('restores volume, mute, shuffle and repeat', () => {
+			const storage = fakeStorage();
+			const first = storeWithLibrary({ storage });
+			first.setVolume(0.3);
+			first.toggleMute();
+			first.toggleShuffle();
+			first.cycleRepeat();
+
+			const second = storeWithLibrary({ storage });
+
+			expect(second.volume).toBe(0.3);
+			expect(second.muted).toBe(true);
+			expect(second.shuffleOn).toBe(true);
+			expect(second.repeatMode).toBe('all');
+		});
+
+		it('drops tracks that have left the library and rests on the first remaining one', () => {
+			const storage = fakeStorage();
+			const first = storeWithLibrary({ storage });
+			first.playTrack('t2');
+			first.seek(0.5);
+
+			const remaining = [makeTrack('t1'), makeTrack('t3')];
+			const second = new PlayerStore({ storage });
+			second.tracksByPlaylist = { p1: remaining, [ALL_TRACKS_PLAYLIST_ID]: remaining };
+			second.restoreSaved();
+
+			expect(ids(second.queue)).toEqual(['t1', 't3']);
+			expect(second.currentTrackId).toBe('t1');
+			expect(second.progress).toBe(0);
+		});
+
+		it('ignores corrupt storage', () => {
+			const storage = fakeStorage({
+				'musique:playback': '{not json',
+				'musique:queue': '{"queueIds": "nope"}'
+			});
+
+			const store = storeWithLibrary({ storage });
+
+			expect(store.volume).toBe(0.7);
+			expect(store.queue).toEqual([]);
+			expect(store.currentTrackId).toBeNull();
+		});
+
+		it('saves nothing until the saved state has been read back', () => {
+			const storage = fakeStorage({ 'musique:playback': '{"volume":0.3}' });
+			const store = new PlayerStore({ storage });
+
+			store.setVolume(0.9);
+
+			expect(storage.data.get('musique:playback')).toBe('{"volume":0.3}');
+		});
+	});
+
+	it('toggleMute keeps the level, and changing the volume unmutes', () => {
+		const audio = fakeAudio(200);
+		const store = storeWithLibrary({ audio });
+		store.setVolume(0.4);
+
+		store.toggleMute();
+		expect(store.muted).toBe(true);
+		expect(audio.muted).toBe(true);
+		expect(store.volume).toBe(0.4);
+
+		store.setVolume(0.6);
+		expect(store.muted).toBe(false);
+		expect(audio.muted).toBe(false);
 	});
 
 	it('toggleLike flips the liked state for a track', () => {
