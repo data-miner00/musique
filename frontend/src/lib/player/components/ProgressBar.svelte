@@ -55,6 +55,8 @@
 	}
 
 	function seekFromKey(e: KeyboardEvent) {
+		// Shift + arrows belong to the app-wide shortcuts.
+		if (e.shiftKey) return;
 		if (e.key === 'ArrowRight') onSeek(value + step);
 		else if (e.key === 'ArrowLeft') onSeek(value - step);
 	}

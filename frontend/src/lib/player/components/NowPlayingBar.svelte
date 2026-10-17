@@ -79,9 +79,15 @@
 			<Icon name="queue" size={18} class="text-ink-dim" />
 		</button>
 		<div class="flex w-[110px] items-center gap-1.5">
-			<Icon name="volume" size={16} class="text-ink-dim" />
+			<button
+				onclick={() => player.toggleMute()}
+				class="flex-shrink-0"
+				aria-label={player.muted ? 'Unmute' : 'Mute'}
+			>
+				<Icon name={player.muted ? 'volume-muted' : 'volume'} size={16} class="text-ink-dim" />
+			</button>
 			<ProgressBar
-				value={player.volume}
+				value={player.muted ? 0 : player.volume}
 				onSeek={(r) => player.setVolume(r)}
 				live
 				fillColor="var(--color-ink-3)"

@@ -10,6 +10,7 @@
 	<div class="flex max-w-[420px] items-center gap-2.5 rounded-[10px] bg-white/6 px-4 py-3">
 		<Icon name="search" size={16} class="text-ink-faint" />
 		<input
+			id="search-input"
 			type="text"
 			bind:value={player.searchQuery}
 			placeholder="Songs, artists, albums..."
