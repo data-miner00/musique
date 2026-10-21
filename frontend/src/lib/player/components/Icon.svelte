@@ -6,8 +6,12 @@
 		| 'prev'
 		| 'next'
 		| 'volume'
+		| 'volume-muted'
+		| 'keyboard'
+		| 'close'
 		| 'shuffle'
 		| 'repeat'
+		| 'repeat-one'
 		| 'lyrics'
 		| 'queue'
 		| 'home'
@@ -64,6 +68,24 @@
 			stroke-linecap="round"
 			d="M16.5 8.5a5 5 0 010 7"
 		/>
+	{:else if name === 'volume-muted'}
+		<path fill="currentColor" d="M4 9v6h4l5 5V4L8 9H4z" />
+		<path
+			stroke="currentColor"
+			stroke-width="1.6"
+			stroke-linecap="round"
+			d="M16.5 9.5l5 5M21.5 9.5l-5 5"
+		/>
+	{:else if name === 'keyboard'}
+		<rect x="3" y="6" width="18" height="12" rx="2" stroke="currentColor" stroke-width="1.8" />
+		<path
+			stroke="currentColor"
+			stroke-width="1.8"
+			stroke-linecap="round"
+			d="M7 10h.01M10.5 10h.01M13.5 10h.01M17 10h.01M8 14h8"
+		/>
+	{:else if name === 'close'}
+		<path stroke="currentColor" stroke-width="2" stroke-linecap="round" d="M6 6l12 12M18 6L6 18" />
 	{:else if name === 'shuffle'}
 		<path
 			stroke="currentColor"
@@ -72,7 +94,7 @@
 			stroke-linejoin="round"
 			d="M4 6h3l9 12h4M4 18h3l3-4M16 6h4M17 4v4h-4"
 		/>
-	{:else if name === 'repeat'}
+	{:else if name === 'repeat' || name === 'repeat-one'}
 		<path
 			stroke="currentColor"
 			stroke-width="1.8"
@@ -80,6 +102,15 @@
 			stroke-linejoin="round"
 			d="M4 8a4 4 0 014-4h11M19 5v4M20 16a4 4 0 01-4 4H5M5 19v-4"
 		/>
+		{#if name === 'repeat-one'}
+			<path
+				stroke="currentColor"
+				stroke-width="1.8"
+				stroke-linecap="round"
+				stroke-linejoin="round"
+				d="M10.8 10.4l1.6-1.4v6"
+			/>
+		{/if}
 	{:else if name === 'lyrics'}
 		<path
 			stroke="currentColor"

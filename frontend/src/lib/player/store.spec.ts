@@ -2,6 +2,8 @@ import { describe, it, expect } from 'vitest';
 import { PlayerStore, ALL_TRACKS_PLAYLIST_ID } from './store.svelte';
 import type { Track } from './types';
 
+type FakeAudio = HTMLAudioElement & { fire: (type: string) => void };
+
 function makeTrack(id: string, overrides: Partial<Track> = {}): Track {
 	return {
 		id,
@@ -16,8 +18,34 @@ function makeTrack(id: string, overrides: Partial<Track> = {}): Track {
 	};
 }
 
-function storeWithLibrary(): PlayerStore {
-	const store = new PlayerStore();
+function fakeAudio(duration: number): FakeAudio {
+	const listeners: Record<string, () => void> = {};
+	return {
+		currentTime: 0,
+		duration,
+		volume: 1,
+		muted: false,
+		src: '',
+		addEventListener: (type: string, listener: () => void) => {
+			listeners[type] = listener;
+		},
+		fire: (type: string) => listeners[type]?.(),
+		play: () => Promise.resolve(),
+		pause: () => {}
+	} as unknown as FakeAudio;
+}
+
+function fakeStorage(initial: Record<string, string> = {}) {
+	const data = new Map(Object.entries(initial));
+	return {
+		data,
+		getItem: (key: string) => data.get(key) ?? null,
+		setItem: (key: string, value: string) => void data.set(key, value)
+	};
+}
+
+function storeWithLibrary(options: ConstructorParameters<typeof PlayerStore>[0] = {}): PlayerStore {
+	const store = new PlayerStore(options);
 	const p1Tracks = ['t1', 't2', 't3'].map((id) => makeTrack(id, { playlistId: 'p1' }));
 	const p2Tracks = [makeTrack('t4', { playlistId: 'p2', title: 'Midnight Run', artist: 'Nova' })];
 	const allTracks = [...p1Tracks, ...p2Tracks];
@@ -33,8 +61,12 @@ function storeWithLibrary(): PlayerStore {
 		{ id: 'p2', name: 'Folder Two', desc: '1 song', hue: 20 }
 	];
 	store.activePlaylistId = 'p1';
+	// loadLibrary() does this once the tracks are in.
+	store.restoreSaved();
 	return store;
 }
+
+const ids = (tracks: Track[]) => tracks.map((t) => t.id);
 
 describe('PlayerStore', () => {
 	it('playTrack starts playback of the given track from the beginning', () => {
@@ -47,24 +79,6 @@ describe('PlayerStore', () => {
 		expect(store.progress).toBe(0);
 	});
 
-	it('nextTrack wraps around from the last track to the first, within the active playlist', () => {
-		const store = storeWithLibrary();
-		store.playTrack('t3');
-
-		store.nextTrack();
-
-		expect(store.currentTrackId).toBe('t1');
-	});
-
-	it('prevTrack wraps around from the first track to the last, within the active playlist', () => {
-		const store = storeWithLibrary();
-		store.playTrack('t1');
-
-		store.prevTrack();
-
-		expect(store.currentTrackId).toBe('t3');
-	});
-
 	it('currentTrack reflects the actually-playing track even after browsing to a different playlist', () => {
 		const store = storeWithLibrary();
 		store.playTrack('t2');
@@ -72,6 +86,297 @@ describe('PlayerStore', () => {
 		store.selectPlaylist('p2');
 
 		expect(store.currentTrack.id).toBe('t2');
+	});
+
+	describe('queue', () => {
+		it('playTrack captures the list on screen as the queue', () => {
+			const store = storeWithLibrary();
+
+			store.playTrack('t2');
+
+			expect(ids(store.queue)).toEqual(['t1', 't2', 't3']);
+			expect(ids(store.upNext)).toEqual(['t3']);
+			expect(store.queueSource).toEqual({ id: 'p1', name: 'Folder One' });
+		});
+
+		it('next keeps following the queue after browsing elsewhere', () => {
+			const store = storeWithLibrary();
+			store.playTrack('t1');
+
+			store.selectPlaylist('p2');
+			store.nextTrack();
+			expect(store.currentTrackId).toBe('t2');
+
+			store.goSearch();
+			store.nextTrack();
+			expect(store.currentTrackId).toBe('t3');
+		});
+
+		it('playing from search captures the results at that moment', () => {
+			const store = storeWithLibrary();
+			store.goSearch();
+			store.searchQuery = 'title';
+			store.playTrack('t2');
+
+			store.searchQuery = 'nova';
+			store.nextTrack();
+
+			expect(store.currentTrackId).toBe('t3');
+			expect(store.queueSource?.name).toBe('Search results');
+		});
+
+		it('plays the next track in the queue when a song ends', () => {
+			const audio = fakeAudio(200);
+			const store = storeWithLibrary({ audio });
+			store.playTrack('t1');
+
+			audio.fire('ended');
+
+			expect(store.currentTrackId).toBe('t2');
+			expect(store.isPlaying).toBe(true);
+		});
+
+		it('playFromQueue jumps within the queue without rebuilding it', () => {
+			const store = storeWithLibrary();
+			store.playTrack('t1');
+			store.selectPlaylist('p2');
+
+			store.playFromQueue('t3');
+
+			expect(store.currentTrackId).toBe('t3');
+			expect(ids(store.queue)).toEqual(['t1', 't2', 't3']);
+		});
+
+		it('toggleActivePlaylist starts the browsed playlist, then pauses it', () => {
+			const store = storeWithLibrary();
+
+			store.toggleActivePlaylist();
+			expect(store.currentTrackId).toBe('t1');
+			expect(store.activePlaylistPlaying).toBe(true);
+
+			store.toggleActivePlaylist();
+			expect(store.currentTrackId).toBe('t1');
+			expect(store.isPlaying).toBe(false);
+
+			store.selectPlaylist('p2');
+			store.toggleActivePlaylist();
+			expect(store.currentTrackId).toBe('t4');
+			expect(store.isPlaying).toBe(true);
+		});
+	});
+
+	describe('repeat', () => {
+		it('cycleRepeat steps through off, all and one', () => {
+			const store = storeWithLibrary();
+			expect(store.repeatMode).toBe('off');
+
+			store.cycleRepeat();
+			expect(store.repeatMode).toBe('all');
+
+			store.cycleRepeat();
+			expect(store.repeatMode).toBe('one');
+
+			store.cycleRepeat();
+			expect(store.repeatMode).toBe('off');
+		});
+
+		it('off: next on the last track rests on the first track, paused', () => {
+			const audio = fakeAudio(200);
+			const store = storeWithLibrary({ audio });
+			store.playTrack('t3');
+
+			store.nextTrack();
+
+			expect(store.currentTrackId).toBe('t1');
+			expect(store.isPlaying).toBe(false);
+			expect(store.progress).toBe(0);
+			expect(audio.src).toBe('http://localhost:8000/stream/t1');
+		});
+
+		it('off: previous on the first track restarts it', () => {
+			const store = storeWithLibrary();
+			store.playTrack('t1');
+
+			store.prevTrack();
+
+			expect(store.currentTrackId).toBe('t1');
+			expect(store.isPlaying).toBe(true);
+		});
+
+		it('all: next and previous wrap around the queue', () => {
+			const store = storeWithLibrary();
+			store.cycleRepeat();
+			store.playTrack('t3');
+
+			store.nextTrack();
+			expect(store.currentTrackId).toBe('t1');
+
+			store.prevTrack();
+			expect(store.currentTrackId).toBe('t3');
+		});
+
+		it('one: the song restarts when it ends, but next still moves on', () => {
+			const audio = fakeAudio(200);
+			const store = storeWithLibrary({ audio });
+			store.cycleRepeat();
+			store.cycleRepeat();
+			store.playTrack('t1');
+			audio.currentTime = 200;
+
+			audio.fire('ended');
+			expect(store.currentTrackId).toBe('t1');
+			expect(audio.currentTime).toBe(0);
+
+			store.nextTrack();
+			expect(store.currentTrackId).toBe('t2');
+			expect(store.repeatMode).toBe('one');
+		});
+	});
+
+	it('previous restarts the current song when more than 3 seconds in', () => {
+		const store = storeWithLibrary();
+		store.playTrack('t2');
+		store.seek(0.5);
+
+		store.prevTrack();
+		expect(store.currentTrackId).toBe('t2');
+		expect(store.progress).toBe(0);
+
+		store.prevTrack();
+		expect(store.currentTrackId).toBe('t1');
+	});
+
+	describe('shuffle', () => {
+		it('puts the current song first and plays every other track once', () => {
+			const store = storeWithLibrary({ random: () => 0 });
+			store.playTrack('t2');
+
+			store.toggleShuffle();
+
+			expect(ids(store.queue)).toEqual(['t2', 't3', 't1']);
+			store.nextTrack();
+			expect(store.currentTrackId).toBe('t3');
+			store.nextTrack();
+			expect(store.currentTrackId).toBe('t1');
+		});
+
+		it('turning it off carries on from the current song in the original order', () => {
+			const store = storeWithLibrary({ random: () => 0 });
+			store.playTrack('t2');
+			store.toggleShuffle();
+
+			store.toggleShuffle();
+
+			expect(ids(store.queue)).toEqual(['t1', 't2', 't3']);
+			store.nextTrack();
+			expect(store.currentTrackId).toBe('t3');
+		});
+
+		it('with repeat all, a new lap never opens with the song that just finished', () => {
+			// With random() === 0 the fresh order would open with t2, the song
+			// that just finished, so the store has to move it off the front.
+			const store = storeWithLibrary({ random: () => 0 });
+			store.toggleShuffle();
+			store.cycleRepeat();
+			store.playTrack('t1');
+			expect(ids(store.queue)).toEqual(['t1', 't3', 't2']);
+			store.nextTrack();
+			store.nextTrack();
+
+			store.nextTrack();
+
+			expect(store.currentTrackId).toBe('t3');
+			expect(ids(store.queue).sort()).toEqual(['t1', 't2', 't3']);
+		});
+	});
+
+	describe('remembered state', () => {
+		it('restores the queue, the song and the position, paused', () => {
+			const storage = fakeStorage();
+			const first = storeWithLibrary({ storage, audio: fakeAudio(200) });
+			first.playTrack('t2');
+			first.seek(0.25);
+
+			const audio = fakeAudio(200);
+			const second = storeWithLibrary({ storage, audio });
+
+			expect(ids(second.queue)).toEqual(['t1', 't2', 't3']);
+			expect(second.queueSource).toEqual({ id: 'p1', name: 'Folder One' });
+			expect(second.currentTrackId).toBe('t2');
+			expect(second.progress).toBe(0.25);
+			expect(second.isPlaying).toBe(false);
+			expect(audio.src).toBe('http://localhost:8000/stream/t2');
+			expect(audio.currentTime).toBe(50);
+		});
+
+		it('restores volume, mute, shuffle and repeat', () => {
+			const storage = fakeStorage();
+			const first = storeWithLibrary({ storage });
+			first.setVolume(0.3);
+			first.toggleMute();
+			first.toggleShuffle();
+			first.cycleRepeat();
+
+			const second = storeWithLibrary({ storage });
+
+			expect(second.volume).toBe(0.3);
+			expect(second.muted).toBe(true);
+			expect(second.shuffleOn).toBe(true);
+			expect(second.repeatMode).toBe('all');
+		});
+
+		it('drops tracks that have left the library and rests on the first remaining one', () => {
+			const storage = fakeStorage();
+			const first = storeWithLibrary({ storage });
+			first.playTrack('t2');
+			first.seek(0.5);
+
+			const remaining = [makeTrack('t1'), makeTrack('t3')];
+			const second = new PlayerStore({ storage });
+			second.tracksByPlaylist = { p1: remaining, [ALL_TRACKS_PLAYLIST_ID]: remaining };
+			second.restoreSaved();
+
+			expect(ids(second.queue)).toEqual(['t1', 't3']);
+			expect(second.currentTrackId).toBe('t1');
+			expect(second.progress).toBe(0);
+		});
+
+		it('ignores corrupt storage', () => {
+			const storage = fakeStorage({
+				'musique:playback': '{not json',
+				'musique:queue': '{"queueIds": "nope"}'
+			});
+
+			const store = storeWithLibrary({ storage });
+
+			expect(store.volume).toBe(0.7);
+			expect(store.queue).toEqual([]);
+			expect(store.currentTrackId).toBeNull();
+		});
+
+		it('saves nothing until the saved state has been read back', () => {
+			const storage = fakeStorage({ 'musique:playback': '{"volume":0.3}' });
+			const store = new PlayerStore({ storage });
+
+			store.setVolume(0.9);
+
+			expect(storage.data.get('musique:playback')).toBe('{"volume":0.3}');
+		});
+	});
+
+	it('toggleMute keeps the level, and changing the volume unmutes', () => {
+		const audio = fakeAudio(200);
+		const store = storeWithLibrary({ audio });
+		store.setVolume(0.4);
+
+		store.toggleMute();
+		expect(store.muted).toBe(true);
+		expect(audio.muted).toBe(true);
+		expect(store.volume).toBe(0.4);
+
+		store.setVolume(0.6);
+		expect(store.muted).toBe(false);
+		expect(audio.muted).toBe(false);
 	});
 
 	it('toggleLike flips the liked state for a track', () => {
@@ -85,8 +390,30 @@ describe('PlayerStore', () => {
 		expect(store.isLiked('t1')).toBe(false);
 	});
 
+	it('seek moves the audio to the matching position in the track', () => {
+		const audio = fakeAudio(200);
+		const store = storeWithLibrary({ audio });
+		store.playTrack('t1');
+
+		store.seek(0.5);
+
+		expect(audio.currentTime).toBe(100);
+		expect(store.progress).toBe(0.5);
+	});
+
+	it('seek does nothing when no track is loaded', () => {
+		const audio = fakeAudio(200);
+		const store = storeWithLibrary({ audio });
+
+		store.seek(0.5);
+
+		expect(audio.currentTime).toBe(0);
+		expect(store.progress).toBe(0);
+	});
+
 	it('seek clamps ratios outside 0..1', () => {
 		const store = storeWithLibrary();
+		store.playTrack('t1');
 
 		store.seek(-0.5);
 		expect(store.progress).toBe(0);
