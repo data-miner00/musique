@@ -1,68 +1,21 @@
-# sv
+# Musique Frontend
 
-Everything you need to build a Svelte project, powered by [`sv`](https://github.com/sveltejs/cli).
+## Getting Started
 
-## Creating a project
-
-If you're seeing this, you've probably already done this step. Congrats!
-
-```sh
-# create a new project
-npx sv create my-app
 ```
-
-To recreate this project with the same configuration:
-
-```sh
-# recreate this project
-npx sv@0.16.3 create --template minimal --types ts --add prettier eslint vitest="usages:unit,component" tailwindcss="plugins:none" sveltekit-adapter="adapter:auto" mcp="ide:claude-code,vscode+setup:remote" --install npm .
-```
-
-## Developing
-
-Once you've created a project and installed dependencies with `npm install` (or `pnpm install` or `yarn`), start a development server:
-
-```sh
 npm run dev
-
-# or start the server and open the app in a new browser tab
-npm run dev -- --open
 ```
 
-## Building
+To test it in local network,
 
-To create a production version of your app:
+1. Replace the `.env` for the base url to use local IP. Example
 
-```sh
-npm run build
+```
+PUBLIC_API_BASE_URL=http://192.168.12.1:8000
 ```
 
-You can preview the production build with `npm run preview`.
+2. Run
 
-> To deploy your app, you may need to install an [adapter](https://svelte.dev/docs/kit/adapters) for your target environment.
-
-## Testing
-
-Run the full test suite once (unit + component):
-
-```sh
-npm run test
 ```
-
-Run just the store/logic unit tests (Node environment):
-
-```sh
-npm run test:unit -- --project=server --run
-```
-
-Run just the component tests (real Chromium via Playwright):
-
-```sh
-npm run test:unit -- --project=client --run
-```
-
-Watch mode (reruns on file change):
-
-```sh
-npm run test:unit
+npm run dev -- --host
 ```
