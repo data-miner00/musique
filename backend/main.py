@@ -6,10 +6,16 @@ from pathlib import Path
 from fastapi import APIRouter, FastAPI, HTTPException
 from fastapi.responses import FileResponse
 from pydantic import BaseModel
+from starlette.datastructures import MutableHeaders
+from starlette.types import ASGIApp, Message, Receive, Scope, Send
 
 from library import Library, Track, scan_library
 
 MUSIC_DIR = Path(os.environ.get("MUSIC_DIR", "./music")).resolve()
+
+# The frontend's static build. Set in the container; unset in dev, where the
+# Vite dev server serves the page and the backend serves only the API.
+FRONTEND_DIR = os.environ.get("FRONTEND_DIR")
 
 _library = Library(tracks=[], playlists=[])
 
@@ -99,3 +105,49 @@ def stream_track(track_id: str) -> FileResponse:
 
 
 app.include_router(api)
+
+IMMUTABLE_ASSETS_PREFIX = "/_app/immutable/"
+PAGE_PATHS = {"/", "/index.html"}
+
+
+def _cache_control_for(path: str) -> str | None:
+    if path.startswith(IMMUTABLE_ASSETS_PREFIX):
+        return "public, max-age=31536000, immutable"
+    if path in PAGE_PATHS:
+        return "no-cache"
+    return None
+
+
+class FrontendCacheHeaders:
+    """Sets Cache-Control on the frontend build's responses.
+
+    SvelteKit fingerprints everything under /_app/immutable/, so those files
+    can be cached for good. The page must always be revalidated (a cheap 304
+    on its ETag): a stale copy after a rebuild would point at assets that no
+    longer exist.
+
+    A plain ASGI middleware rather than @app.middleware("http"), so audio
+    streams pass straight through.
+    """
+
+    def __init__(self, app: ASGIApp) -> None:
+        self.app = app
+
+    async def __call__(self, scope: Scope, receive: Receive, send: Send) -> None:
+        cache_control = _cache_control_for(scope["path"]) if scope["type"] == "http" else None
+        if cache_control is None:
+            await self.app(scope, receive, send)
+            return
+
+        async def send_with_cache_control(message: Message) -> None:
+            if message["type"] == "http.response.start" and message["status"] in (200, 304):
+                MutableHeaders(scope=message)["Cache-Control"] = cache_control
+            await send(message)
+
+        await self.app(scope, receive, send_with_cache_control)
+
+
+if FRONTEND_DIR:
+    # Unknown paths stay 404: the app has a single page, at "/".
+    app.frontend("/", directory=FRONTEND_DIR, fallback=None)
+    app.add_middleware(FrontendCacheHeaders)
