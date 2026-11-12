@@ -1,0 +1,25 @@
+# Patterns match from the repo root, so anything that can sit inside
+# backend/ or frontend/ needs a **/ prefix.
+
+# Rebuilt inside the image, or platform-specific.
+**/.venv
+**/node_modules
+**/__pycache__
+**/*.py[oc]
+frontend/.svelte-kit
+frontend/build
+
+# Local settings: the compose .env holds host paths, and Vite would bake a
+# stray frontend .env into the build.
+**/.env*
+
+# Local music folders, potentially gigabytes.
+backend/music
+music
+
+# Never copied into the image.
+.git
+.github
+.scratch
+docs
+scripts
