@@ -3,8 +3,7 @@ from collections.abc import AsyncGenerator
 from contextlib import asynccontextmanager
 from pathlib import Path
 
-from fastapi import FastAPI, HTTPException
-from fastapi.middleware.cors import CORSMiddleware
+from fastapi import APIRouter, FastAPI, HTTPException
 from fastapi.responses import FileResponse
 from pydantic import BaseModel
 
@@ -26,16 +25,16 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None]:
     yield
 
 
-app = FastAPI(title="Musique Backend", lifespan=lifespan)
-
-# Single-user, no-auth backend meant to be reached from the SvelteKit dev
-# server on a different origin/port - safe to allow any origin.
-app.add_middleware(
-    CORSMiddleware,
-    allow_origins=["*"],
-    allow_methods=["GET"],
-    allow_headers=["*"],
+app = FastAPI(
+    title="Musique Backend",
+    lifespan=lifespan,
+    docs_url="/api/docs",
+    redoc_url="/api/redoc",
+    openapi_url="/api/openapi.json",
 )
+
+
+api = APIRouter(prefix="/api")
 
 
 class TrackOut(BaseModel):
@@ -66,29 +65,24 @@ def _track_out(track: Track) -> TrackOut:
     )
 
 
-@app.get("/")
-def read_root():
-    return {"message": "Hello, World!"}
-
-
-@app.get("/health")
+@api.get("/health")
 def health_check():
     return {"status": "ok"}
 
 
-@app.get("/tracks", response_model=list[TrackOut])
+@api.get("/tracks", response_model=list[TrackOut])
 def list_tracks() -> list[TrackOut]:
     return [_track_out(t) for t in _library.tracks]
 
 
-@app.get("/playlists", response_model=list[PlaylistOut])
+@api.get("/playlists", response_model=list[PlaylistOut])
 def list_playlists() -> list[PlaylistOut]:
     return [
         PlaylistOut(id=p.id, name=p.name, track_count=len(p.track_ids)) for p in _library.playlists
     ]
 
 
-@app.get("/playlists/{playlist_id}/tracks", response_model=list[TrackOut])
+@api.get("/playlists/{playlist_id}/tracks", response_model=list[TrackOut])
 def list_playlist_tracks(playlist_id: str) -> list[TrackOut]:
     playlist = _library.playlists_by_id.get(playlist_id)
     if playlist is None:
@@ -96,9 +90,12 @@ def list_playlist_tracks(playlist_id: str) -> list[TrackOut]:
     return [_track_out(_library.tracks_by_id[track_id]) for track_id in playlist.track_ids]
 
 
-@app.get("/stream/{track_id}")
+@api.get("/stream/{track_id}")
 def stream_track(track_id: str) -> FileResponse:
     track = _library.tracks_by_id.get(track_id)
     if track is None:
         raise HTTPException(status_code=404, detail="Track not found")
     return FileResponse(MUSIC_DIR / track.relative_path, media_type="audio/mpeg")
+
+
+app.include_router(api)

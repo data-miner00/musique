@@ -20,6 +20,11 @@ export default defineConfig({
 			adapter: adapter()
 		})
 	],
+	server: {
+		// The frontend calls the API on its own origin. In dev, forward those
+		// calls to uvicorn so it can stay on localhost (`vite preview` reuses this).
+		proxy: { '/api': 'http://localhost:8000' }
+	},
 	test: {
 		expect: { requireAssertions: true },
 		projects: [

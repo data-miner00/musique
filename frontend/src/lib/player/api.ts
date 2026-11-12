@@ -1,8 +1,9 @@
 import { hueForId } from './format';
 import type { Playlist, Track } from './types';
-import { PUBLIC_API_BASE_URL } from '$env/static/public';
 
-const API_BASE = PUBLIC_API_BASE_URL;
+// Same-origin: the backend serves the API under /api, and in dev Vite
+// forwards /api to it (see the proxy in vite.config.ts).
+const API_BASE = '/api';
 
 type TrackDto = {
 	id: string;
