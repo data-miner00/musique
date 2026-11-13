@@ -18,15 +18,12 @@ Start the dev server with auto-reload:
 uv run uvicorn main:app --reload --port 8000
 ```
 
-For local network testing
+The API is served under `/api`:
 
-```
-uv run uvicorn main:app --reload --host 0.0.0.0 --port 8000
-```
+- Interactive docs (Swagger UI): http://127.0.0.1:8000/api/docs
+- Health check: http://127.0.0.1:8000/api/health
 
-- App: http://127.0.0.1:8000
-- Interactive docs (Swagger UI): http://127.0.0.1:8000/docs
-- Health check: http://127.0.0.1:8000/health
+The page itself comes from the frontend dev server, which forwards `/api` here, so uvicorn can stay on localhost — even when testing from a phone on the local network (see `frontend/README.md`).
 
 ## Testing
 

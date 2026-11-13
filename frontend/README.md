@@ -2,20 +2,18 @@
 
 ## Getting Started
 
+Start the backend on `localhost:8000` (see `backend/README.md`), then:
+
 ```
 npm run dev
 ```
 
-To test it in local network,
+The frontend calls the API on its own origin under `/api`; the dev server forwards those requests to the backend on `localhost:8000`. No `.env` file is needed.
 
-1. Replace the `.env` for the base url to use local IP. Example
-
-```
-PUBLIC_API_BASE_URL=http://192.168.12.1:8000
-```
-
-2. Run
+To test from another device on the local network, such as a phone:
 
 ```
 npm run dev -- --host
 ```
+
+Then open the "Network" address it prints. The backend can stay on localhost.
